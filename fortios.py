@@ -14,6 +14,8 @@ from homeassistant.components.device_tracker import (
     DOMAIN, PLATFORM_SCHEMA, DeviceScanner)
 from homeassistant.const import CONF_HOST, CONF_TOKEN
 from homeassistant.const import CONF_VERIFY_SSL
+from homeassistant.components.device_tracker import CONF_CONSIDER_HOME
+
 
 _LOGGER = logging.getLogger(__name__)
 DEFAULT_VERIFY_SSL = True
@@ -22,7 +24,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_HOST): cv.string,
     vol.Required(CONF_TOKEN): cv.string,
     vol.Optional(CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL): cv.boolean,
-    vol.Optional(CONF_CONSIDER_HOME, default=180): cv.positive_int
+    vol.Optional(CONF_CONSIDER_HOME, default=180): cv.timedelta
 })
 
 def get_scanner(hass, config):
@@ -131,7 +133,7 @@ class FortiOSDeviceScanner(DeviceScanner):
         maclines = []
 
         for p in data['results']:
-            if p['last_seen'] < self.consider_home:
+            if p['last_seen'] < self.consider_home.total_seconds():
                 maclines.append(p['mac'].upper())
 
         return maclines
