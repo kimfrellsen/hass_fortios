@@ -28,7 +28,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
 })
 
 def get_scanner(hass, config):
-    """Validate the configuration and return a Aruba scanner."""
+    """Validate the configuration and return a FortiOSDeviceScanner."""
     _LOGGER.debug('fortios, get_scanner')
 
     scanner = FortiOSDeviceScanner(config[DOMAIN])
