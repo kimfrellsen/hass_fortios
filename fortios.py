@@ -8,6 +8,7 @@ https://home-assistant.io/components/device_tracker.fortios/
 import logging
 import voluptuous as vol
 from datetime import timedelta
+from fortiosapi import FortiOSAPI
 
 import homeassistant.helpers.config_validation as cv
 from homeassistant.components.device_tracker import (
@@ -16,6 +17,7 @@ from homeassistant.const import CONF_HOST, CONF_TOKEN
 from homeassistant.const import CONF_VERIFY_SSL
 from homeassistant.components.device_tracker import CONF_CONSIDER_HOME
 
+REQUIREMENTS = ['fortiosapi==0.10.4']
 
 _LOGGER = logging.getLogger(__name__)
 DEFAULT_VERIFY_SSL = True
@@ -47,6 +49,13 @@ class FortiOSDeviceScanner(DeviceScanner):
         self.consider_home = config.get(CONF_CONSIDER_HOME)
         self.last_results = {}
 
+        self.fgt = FortiOSAPI()
+
+        try:
+            fgt.tokenlogin(self, self.host, self.token)
+        except Exception as e:
+            self.fail("Exception : %s" + str(e))
+
         self.success_init = self._update_info()
         _LOGGER.info('FortiOSDeviceScanner initialized')
 
@@ -70,7 +79,6 @@ class FortiOSDeviceScanner(DeviceScanner):
             _LOGGER.error('get_device_name no json results')
             return None
 
-        #data = json.loads(string_result)
         for p in data['results']:
             if p['mac'] == device:
                 try:
@@ -86,46 +94,18 @@ class FortiOSDeviceScanner(DeviceScanner):
     def _update_info(self):
         """
         Ensure the information from the FortiOS is up to date.
+        Retrieve data from FortiOS and return parsed result.
         """
-        import json
 
-        url = 'https://' \
-                + self.host \
-                + '/api/v2/monitor/user/device/select?access_token=' \
-                + self.token
-        _LOGGER.debug("_update_info url=%s", url)
+        dict_result = self.fgt.monitor('user/device/select','')
 
-        string_result = self._get_fortios_data(url)
-
-        if string_result:
+        if dict_result:
             self.last_results = []
-            self.last_results_json = str()
-            last_results_json = json.loads(string_result)
-
-            self.last_results_json = last_results_json
             self.last_results = \
-                self._parse_fortios_response(last_results_json)
+                self._parse_fortios_response(dict_result)
             return True
 
         return False
-
-    def _get_fortios_data(self, url):
-        """Retrieve data from FortiOS and return parsed result."""
-
-        import urllib.request
-        import ssl
-
-        if self.verify_ssl == False:
-            _LOGGER.debug('_get_fortios_data verify_ssl = False')
-            ssl._create_default_https_context = ssl._create_unverified_context
-
-        try:
-            response = urllib.request.urlopen(url)
-        except requests.exceptions.Timeout:
-            return
-
-        return response.read()
-
 
     def _parse_fortios_response(self, data):
         """Parse the FortiOS data format."""
