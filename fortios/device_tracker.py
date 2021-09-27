@@ -9,7 +9,7 @@ from homeassistant.const import CONF_HOST, CONF_TOKEN
 from homeassistant.const import CONF_VERIFY_SSL
 #import homeassistant.util.dt as dt_util
 
-REQUIREMENTS = ['fortiosapi==0.10.4']
+REQUIREMENTS = ['fortiosapi==1.0.5']
 
 _LOGGER = logging.getLogger(__name__)
 DEFAULT_VERIFY_SSL = True
