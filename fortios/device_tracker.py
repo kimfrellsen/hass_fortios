@@ -1,113 +1,132 @@
+"""FortiOS device tracker platform."""
+
+from __future__ import annotations
+
+from datetime import datetime
 import logging
-from datetime import timedelta
-import voluptuous as vol
+from typing import Any
 
-import homeassistant.helpers.config_validation as cv
-from homeassistant.components.device_tracker import (
-    DOMAIN, PLATFORM_SCHEMA, DeviceScanner)
-from homeassistant.const import CONF_HOST, CONF_TOKEN
-from homeassistant.const import CONF_VERIFY_SSL
-#import homeassistant.util.dt as dt_util
+from homeassistant.components.device_tracker import ScannerEntity
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-REQUIREMENTS = ['fortiosapi==1.0.5']
+from .const import DEFAULT_DEVICE_NAME, DEVICE_ICONS, DOMAIN
+from .firewall import FortiOSFirewall
 
 _LOGGER = logging.getLogger(__name__)
-DEFAULT_VERIFY_SSL = True
-
-#NOTIFICATION_ID = 'fortios_notification'
-#NOTIFICATION_TITLE = 'FortiOS Device Tracker Setup'
 
 
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
-    vol.Required(CONF_HOST): cv.string,
-    vol.Required(CONF_TOKEN): cv.string,
-    vol.Optional(CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL): cv.boolean
-})
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """Set up FortiOS device tracker from a config entry."""
+    firewall: FortiOSFirewall = hass.data[DOMAIN][entry.unique_id]
+    tracked: set[str] = set()
 
-def get_scanner(hass, config):
-    """Validate the configuration and return a FortiOSDeviceScanner."""
-    from fortiosapi import FortiOSAPI
+    @callback
+    def update_firewall() -> None:
+        """Update the values of the router."""
+        add_entities(firewall, async_add_entities, tracked)
 
-    host = str(config.get(CONF_HOST))
-    verify_ssl = config.get(CONF_VERIFY_SSL)
-    token = str(config.get(CONF_TOKEN))
+    entry.async_on_unload(
+        async_dispatcher_connect(
+            hass, firewall.signal_device_new, update_firewall)
+    )
 
-    _LOGGER.debug('fortios, get_scanner')
-
-    fgt = FortiOSAPI()
-
-    try:
-        fgt.tokenlogin(host, token)
-    except Exception as e:
-        _LOGGER.error("Unable login to fgt Exception : %s" + str(e))
+    update_firewall()
 
 
-    try:
-        scanner = FortiOSDeviceScanner(fgt)
-    except Exception as e:
-        _LOGGER.error("FortiOS get_scanner Initialize failed %s" + str(e))
-        return False
+@callback
+def add_entities(
+    firewall: FortiOSFirewall,
+    async_add_entities: AddEntitiesCallback,
+    tracked: set[str],
+) -> None:
+    """Add new tracker entities from the router."""
+    new_tracked = []
 
-    return scanner
+    for mac, device in firewall.devices.items():
+        if mac in tracked:
+            continue
 
+        new_tracked.append(FortiOSDeviceScanner(firewall, device))
+        tracked.add(mac)
 
-class FortiOSDeviceScanner(DeviceScanner):
-    """This class queries a FortiOS unit for connected devices."""
-
-    def __init__(self, fgt) -> None:
-        """Initialize the scanner."""
-        _LOGGER.debug('__init__')
-        self.last_results = {}
-        self._update()
-        self.fgt = fgt
-
-    def _update(self):
-        """Get the clients from the device."""
-        """
-        Ensure the information from the FortiOS is up to date.
-        Retrieve data from FortiOS and return parsed result.
-        """
-        _LOGGER.debug('_update(self)')
-
-        dict_result = self.fgt.monitor('user/device/select','')
-        self.last_results_json = dict_result
-
-        self.last_results = []
-
-        if dict_result:
-            for p in dict_result['results']:
-                self.last_results.append(p['mac'].upper())
+    async_add_entities(new_tracked, True)
 
 
-    def scan_devices(self):
-        """Scan for new devices and return a list with found device IDs."""
-        _LOGGER.debug('scan_devices(self)')
-        self._update()
-        return self.last_results
+class FortiOSDeviceScanner(ScannerEntity):
+    """Representation of a FortiOS connected device."""
 
-    def get_device_name(self, device):
-        """Return the name of the given device or None if we don't know."""
-        _LOGGER.debug('get_device_name(self, device)')
+    _is_connected: bool = False
+    entity_registry_enabled_default = True
 
-        import json
+    def __init__(self, firewall: FortiOSFirewall, device: dict[str, Any]) -> None:
+        """Initialize a FortiOS device."""
+        self._firewall = firewall
+        self._attr_name = device.get("hostname", DEFAULT_DEVICE_NAME).strip()
+        self._attr_hostname = device.get(
+            "hostname", device.get("master_mac", DEFAULT_DEVICE_NAME).strip()
+        )
+        self._attr_ip_address = device.get("ipv4_address", "")
+        # self._mac = device.get("master_mac", "")
+        self._attr_mac_address = device.get("master_mac", "")
+        self._attr_icon = icon_for_fortios_device(device)
+        self._is_connected = False
+        self._attr_extra_state_attributes: dict[str, Any] = {}
 
-        _LOGGER.debug("get_device_name device=%s", device)
+    @callback
+    def async_update_state(self) -> None:
+        """Update the FortiOS device."""
+        device = self._firewall.devices[self._attr_mac_address]
+        self._is_connected = device.get("is_online", False)
+        self._attr_extra_state_attributes = {
+            "last_seen": datetime.fromtimestamp(device.get("last_seen", "")),
+            "OS_name": device.get("os_name", ""),
+            "IPv6 Address": device.get("ipv6_address", ""),
+            "Hardware vendor": device.get("hardware_vendor", ""),
+            "Hardware type": device.get("hardware_type", ""),
+            "Hardware version": device.get("hardware_version", ""),
+            "Hardware family": device.get("hardware_family", ""),
+        }
 
-        device = device.lower()
+    @property
+    def mac_address(self) -> str:
+        """Return a unique ID."""
+        return self._attr_mac_address
 
-        data = self.last_results_json
+    @property
+    def name(self) -> str:
+        """Return the name."""
+        return self._attr_name
 
-        if data == 0:
-            _LOGGER.error('get_device_name no json results')
-            return None
+    @property
+    def is_connected(self) -> bool:
+        """Return true if the device is connected to the network."""
+        return self._is_connected
 
-        for p in data['results']:
-            if p['mac'] == device:
-                try:
-                    name = p['host']['name']
-                    _LOGGER.debug("get_device_name name=%s", name)
-                    return name
-                except:
-                    return None
+    @callback
+    def async_on_demand_update(self) -> None:
+        """Update state."""
+        self.async_update_state()
+        self.async_write_ha_state()
 
-        return None
+    async def async_added_to_hass(self) -> None:
+        """Register state update callback."""
+        self.async_update_state()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                self._router.signal_device_update,
+                self.async_on_demand_update,
+            )
+        )
+
+
+def icon_for_fortios_device(device: dict[str, Any]) -> str:
+    """Return a device icon from its type."""
+    return DEVICE_ICONS.get(
+        str(device.get("hardware_family", "")).lower(), "mdi:help-network"
+    )
