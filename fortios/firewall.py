@@ -14,7 +14,7 @@ from homeassistant.const import CONF_HOST, CONF_PORT, CONF_TOKEN, CONF_VERIFY_SS
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from .const import CONF_VDOM, DOMAIN, REST_TIMEOUT
+from .const import CONF_VDOM, DOMAIN, FORTIOS_RESULTS_MASTER_MAC, REST_TIMEOUT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -22,9 +22,7 @@ _LOGGER = logging.getLogger(__name__)
 class FortiOSAPI:
     """FortiOS API wrapper."""
 
-    def __init__(
-        self, host: str, port: int, token: str, vdom: str, verify_ssl: bool
-    ) -> None:
+    def __init__(self, host: str, port: int, token: str, vdom: str, verify_ssl: bool) -> None:
         """Initialize the FortiOS API wrapper."""
         self._host = host
         self._port = port
@@ -43,14 +41,13 @@ class FortiOSAPI:
             connector=TCPConnector(ssl=self._verify_ssl),
         ) as session:
             try:
-                async with session.get(
-                    url, headers=headers, params=parameters
-                ) as response:
+                async with session.get(url, headers=headers, params=parameters) as response:
                     # async with session.get(url, headers=headers) as response:
                     response.raise_for_status()
                     return await response.json()
             except aiohttp.ClientError as ex:
-                _LOGGER.error("Error performing GET request to %s: %s", url, ex)
+                _LOGGER.error(
+                    "Error performing GET request to %s: %s", url, ex)
                 raise
 
 
@@ -89,10 +86,12 @@ class FortiOSFirewall:
 
         fortios_devices = await self._api.get("monitor/user/device/query")
         for device in fortios_devices["results"]:
-            mac = device["master_mac"]
+            mac = device[FORTIOS_RESULTS_MASTER_MAC]
+
             if mac not in self.devices:
-                self.devices[mac] = device
                 new_device = True
+
+            self.devices[mac] = device
 
         async_dispatcher_send(self.hass, self.signal_device_update)
 

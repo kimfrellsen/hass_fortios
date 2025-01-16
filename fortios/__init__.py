@@ -30,13 +30,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up FortiOS from a config entry."""
     _LOGGER.debug("Setting up FortiOS entry: %s", entry.entry_id)
 
-    api = FortiOSAPI(
-        entry.data[CONF_HOST],
-        entry.data[CONF_PORT],
-        entry.data[CONF_TOKEN],
-        entry.data[CONF_VDOM],
-        entry.data[CONF_VERIFY_SSL],
-    )
+    api = FortiOSAPI(entry.data[CONF_HOST], entry.data[CONF_PORT],
+                     entry.data[CONF_TOKEN], entry.data[CONF_VDOM],
+                     entry.data[CONF_VERIFY_SSL])
     # Set up firewall
     fgt = FortiOSFirewall(hass, entry, api)
 
@@ -45,10 +41,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await fgt.update_all()
     entry.async_on_unload(
         async_track_time_interval(
-            hass,
-            fgt.update_all,
-            timedelta(seconds=float(entry.data[CONF_SCAN_INTERVAL])),
-        )
+            hass, fgt.update_all, timedelta(seconds=float(entry.data[CONF_SCAN_INTERVAL])))
     )
 
     hass.data.setdefault(DOMAIN, {})

@@ -13,6 +13,8 @@ CONF_SCAN_INTERVAL = "scan_interval"
 REST_TIMEOUT = 5
 MINIMUM_SUPPORTED_VERSION = "6.4.3"
 
+FORTIOS_RESULTS_MASTER_MAC = "master_mac"
+
 
 DEFAULT_DEVICE_NAME = "Unknown entity"
 # Icons

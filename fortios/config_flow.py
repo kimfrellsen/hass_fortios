@@ -49,7 +49,7 @@ class FortiOSFlowHandler(ConfigFlow, domain=DOMAIN):
         self._data: dict[str, Any] = {}
 
     async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
+            self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle a flow initialized by the user."""
         if user_input is None:
@@ -62,9 +62,7 @@ class FortiOSFlowHandler(ConfigFlow, domain=DOMAIN):
                         vol.Required(CONF_TOKEN): str,
                         vol.Required(CONF_VDOM, default=DEFAULT_VDOM): str,
                         vol.Required(CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL): bool,
-                        vol.Required(
-                            CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL
-                        ): int,
+                        vol.Required(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): int,
                     }
                 ),
                 errors={},
@@ -85,13 +83,8 @@ class FortiOSFlowHandler(ConfigFlow, domain=DOMAIN):
 
         errors = {}
 
-        fgt = FortiOSAPI(
-            self._data[CONF_HOST],
-            self._data[CONF_PORT],
-            self._data[CONF_TOKEN],
-            self._data[CONF_VDOM],
-            self._data[CONF_VERIFY_SSL],
-        )
+        fgt = FortiOSAPI(self._data[CONF_HOST], self._data[CONF_PORT],
+                         self._data[CONF_TOKEN], self._data[CONF_VDOM], self._data[CONF_VERIFY_SSL])
         try:
             # Check if the FortiOS device is reachable
             response = await fgt.get("monitor/system/status")
@@ -102,15 +95,11 @@ class FortiOSFlowHandler(ConfigFlow, domain=DOMAIN):
             version = response["version"]
 
             if AwesomeVersion(version) < AwesomeVersion(MINIMUM_SUPPORTED_VERSION):
-                _LOGGER.error(
-                    "Unsupported FortiOS version: %s. It must be at least %s",
-                    version,
-                    MINIMUM_SUPPORTED_VERSION,
-                )
+                _LOGGER.error("Unsupported FortiOS version: %s. It must be at least %s",
+                              version, MINIMUM_SUPPORTED_VERSION)
                 # raise Exception("Unsupported FortiOS version: %s", version)
                 raise UnsupportedFortiOSVersion(
-                    f"Unsupported FortiOS version: {version}. It must be at least {MINIMUM_SUPPORTED_VERSION}"
-                )
+                    f"Unsupported FortiOS version: {version}. It must be at least {MINIMUM_SUPPORTED_VERSION}")
 
             # Assign a unique ID to the flow and abort the flow
             # if another flow with the same unique ID is in progress
